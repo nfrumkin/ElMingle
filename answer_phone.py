@@ -6,7 +6,7 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import datetime
 from google.cloud import speech
-from google.cloud.speech import enums as speech_enums
+# from google.cloud.speech import enums as speech_enums
 # from google.cloud.speech import types as speech_types
 from google.cloud import storage
 import urllib.request
@@ -21,8 +21,8 @@ CHUNK = int(RATE / 10)  # 100ms
 
 # Imports the Google Cloud client library
 from google.cloud import language
-from google.cloud.language import enums as lang_enums
-from google.cloud.language import types as lang_types
+# from google.cloud.language import enums as lang_enums
+# from google.cloud.language import types as lang_types
 
 # Instantiates a client
 nlp_client = language.LanguageServiceClient()
@@ -125,26 +125,26 @@ def gapiUploadUsingURL(url, pid, bn, fp):
 	return fName
 
 def getSpeechTranscript(uri):
-	audio = types.RecognitionAudio(uri=uri)
+	audio = speech.types.RecognitionAudio(uri=uri)
 
 
-	config = types.RecognitionConfig(
-	    encoding=speech_enums.RecognitionConfig.AudioEncoding.LINEAR16,
+	config = speech.types.RecognitionConfig(
+	    encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
 	    sample_rate_hertz=8000,
 	    language_code='en-US')
 
 	# Detects speech in the audio file
-	response = client.recognize(config, audio)
+	response = stt_client.recognize(config, audio)
 
 	print(response.results)
 	return response.results[0].alternatives[0].transcript
 
 def gapiAnalysisText(text):
-	document = types.Document(
+	document = language.types.Document(
 	    content=text,
-	    type=lang_enums.Document.Type.PLAIN_TEXT)
+	    type=language.enums.Document.Type.PLAIN_TEXT)
 
-	encoding_type = lang_enums.EncodingType.UTF8
+	encoding_type = language.enums.EncodingType.UTF8
 
 	response = client.analyze_entities(document, encoding_type=encoding_type)
 	# Loop through entitites returned from the API
@@ -220,8 +220,9 @@ def create_new_profile(phoneId, url):
     file_name = gapiUploadUsingURL(source_file_name, project_id, 
 								bucket_name, destination_folder_path)
 
+    print("============= file collected")
     speech_to_text = getSpeechTranscript(file_name)
-
+    print("============= file collected2")
     user_characteristics = gapiAnalysisText(speech_to_text)
     
     data = {
@@ -278,7 +279,7 @@ if __name__ == "__main__":
     language_code = 'zh-TW'  # a BCP-47 language tag
     client = speech.SpeechClient()
     config = speech.types.RecognitionConfig(
-        encoding=speech_enums.RecognitionConfig.AudioEncoding.LINEAR16,
+        encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
         sample_rate_hertz=RATE,
         language_code=language_code)
 
