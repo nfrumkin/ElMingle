@@ -6,14 +6,13 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import datetime
 from google.cloud import speech
-from google.cloud.speech import enums
-from google.cloud.speech import types
+from google.cloud.speech import enums as speech_enums
+# from google.cloud.speech import types as speech_types
 from google.cloud import storage
 import urllib.request
 
 import re
 import sys
-import pyaudio
 from six.moves import queue
 
 # Audio recording parameters
@@ -22,8 +21,8 @@ CHUNK = int(RATE / 10)  # 100ms
 
 # Imports the Google Cloud client library
 from google.cloud import language
-from google.cloud.language import enums
-from google.cloud.language import types
+from google.cloud.language import enums as lang_enums
+from google.cloud.language import types as lang_types
 
 # Instantiates a client
 nlp_client = language.LanguageServiceClient()
@@ -130,7 +129,7 @@ def getSpeechTranscript(uri):
 
 
 	config = types.RecognitionConfig(
-	    encoding=enums.RecognitionConfig.AudioEncoding.LINEAR16,
+	    encoding=speech_enums.RecognitionConfig.AudioEncoding.LINEAR16,
 	    sample_rate_hertz=8000,
 	    language_code='en-US')
 
@@ -143,9 +142,9 @@ def getSpeechTranscript(uri):
 def gapiAnalysisText(text):
 	document = types.Document(
 	    content=text,
-	    type=enums.Document.Type.PLAIN_TEXT)
+	    type=lang_enums.Document.Type.PLAIN_TEXT)
 
-	encoding_type = enums.EncodingType.UTF8
+	encoding_type = lang_enums.EncodingType.UTF8
 
 	response = client.analyze_entities(document, encoding_type=encoding_type)
 	# Loop through entitites returned from the API
@@ -274,4 +273,17 @@ def compute_similarity(caller_chars, user_chars):
 
 
 if __name__ == "__main__":
+    # See http://g.co/cloud/speech/docs/languages
+    # for a list of supported languages.
+    language_code = 'zh-TW'  # a BCP-47 language tag
+    client = speech.SpeechClient()
+    config = speech.types.RecognitionConfig(
+        encoding=speech_enums.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=RATE,
+        language_code=language_code)
+
+    streaming_config = speech.types.StreamingRecognitionConfig(
+        config=config,
+        interim_results=True)
+    
     app.run(debug=True)
