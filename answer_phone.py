@@ -1,10 +1,20 @@
 from flask import Flask, request
 from twilio.twiml.voice_response import VoiceResponse, Record, Dial
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
+import datetime
+
+# specify credentials for db
+cred = credentials.Certificate('/home/natasha/athena/Desktop/ElMingle/ElMingleCreds.json')
+firebase_admin.initialize_app(cred)
+# set up firebase database connection
+db = firestore.client()
 
 app = Flask(__name__)
 
 recordingURL = ""
-MODERATOR = '+19392190769'
+MODERATOR = '+12034875958'
 
 @app.route("/answer", methods=['GET', 'POST'])
 def answer_call():
