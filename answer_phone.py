@@ -29,7 +29,7 @@ nlp_client = language.LanguageServiceClient()
 ENTITY_TYPE_TO_IGNORE = [8, 9, 10, 11, 12]
 
 # storage creditials
-source_file_name="https://api.twilio.com/2010-04-01/Accounts/ACea8ab3fe5e5886713b6248a77d2e6044/Recordings/REc608fdadf93db987c00d6e5b984f9596"
+# source_file_name="https://api.twilio.com/2010-04-01/Accounts/ACea8ab3fe5e5886713b6248a77d2e6044/Recordings/REc608fdadf93db987c00d6e5b984f9596"
 project_id = 'ElMingo'
 bucket_name = 'bostonhack_elmingo'
 destination_folder_path="wav_intro"
@@ -37,7 +37,7 @@ destination_folder_path="wav_intro"
 app = Flask(__name__)
 
 recordingURL = ""
-MODERATOR = '+12034875958'
+MODERATOR = '+14083142208'
 
 # Use a service account
 cred = credentials.Certificate('/home/natasha/athena/Desktop/ElMingle/ElMingleCreds.json')
@@ -56,11 +56,11 @@ def answer_call():
     resp = VoiceResponse()
 
     # # Read a message aloud to the caller
-    # resp.say("This is El Mingle", voice='Polly.Salli', rate='100%')
-    # resp.say("A service for Connecting the Elderly!)", voice='Polly.Salli', rate='100%')
-    # resp.say("Ready to get chat chatty with that", voice='Polly.Emma', rate='100%')
-    # resp.say("granny or grandpa", voice='Polly.Emma', rate='85%')
-    # resp.say("of your dreams? Please say your name, age, gender identity, and what you are looking for.", voice='Polly.Emma', rate='100%')
+    resp.say("This is El Mingle", voice='Polly.Salli', rate='100%')
+    resp.say("A service for Connecting the Elderly!)", voice='Polly.Salli', rate='100%')
+    resp.say("Ready to get chat chatty with that", voice='Polly.Emma', rate='100%')
+    resp.say("granny or grandpa", voice='Polly.Emma', rate='85%')
+    resp.say("of your dreams? Please say your name, age, gender identity, and what you are looking for.", voice='Polly.Emma', rate='100%')
 
     # Use <Record> to record the caller's message
     resp.record(timeout=1, action="/recording", method="POST")
@@ -75,29 +75,32 @@ def recording_received():
     userNumber = request.values.get('From')
 
     resp = VoiceResponse()
-    # resp.say("Nice to meet you. In just a few moments you'll be speaking to the grandpapi or grandmommy of your dreams! Sit tight while we find you a match that will warm your heart!", voice='Polly.Emma')
+    resp.say("Nice to meet you. In just a few moments you'll be speaking to the grandpapi or grandmommy of your dreams! Sit tight while we find you a snazzy gran gran that will warm your heart!", voice='Polly.Emma')
 
     create_new_profile(userNumber, recordingURL)
 
     match_number = check_available(userNumber)
 
-    if match_number == -1:
-        print("no available users online, connecting to new conference call")
-    else:
-        print("matching you with a user")
+    # if match_number == -1:
+    #     print("no available users online, connecting to new conference call")
+    # else:
+    #     print("matching you with a user")
 
     # Start with a <Dial> verb
     with Dial() as dial:
         # If the caller is our MODERATOR, then start the conference when they
         # join and end the conference when they leave
         if request.values.get('From') == MODERATOR:
+
             dial.conference(
                 'My conference',
                 start_conference_on_enter=True,
-                end_conference_on_exit=True)
+                end_conference_on_exit=True, wait_url="https://burgundy-balinese-9698.twil.io/assets/Robbie%20Williams%20-%20Beyond%20the%20Sea-%5BAudioTrimmer.com%5D%2010.16.53%20PM.mp3")
         else:
             # Otherwise have the caller join as a regular participant
-            dial.conference('My conference', start_conference_on_enter=False)
+            resp.say("................")
+            resp.say("We have found your grandpapi or grandmommy. Ready to get talkey?", voice='Polly.Emma')
+            dial.conference('My conference', start_conference_on_enter=False, wait_url="https://burgundy-balinese-9698.twil.io/assets/Robbie%20Williams%20-%20Beyond%20the%20Sea-%5BAudioTrimmer.com%5D%2010.16.53%20PM.mp3")
 
     resp.append(dial)
 
@@ -115,29 +118,28 @@ def gapiUploadUsingURL(url, pid, bn, fp):
 	fName = "{}.wav".format(fName)
 	print("Save as file: %s\n"%fName)
 
-	file = urllib.request.urlopen(url)
+	file_stream = urllib.request.urlopen(url)
 
 	bucket = storage_client.get_bucket(bn)
 	blob = bucket.blob("{}/{}".format(fp, fName))
 
-	blob.upload_from_string(file.read(), content_type='sound/wav')
+	blob.upload_from_string(file_stream.read(), content_type='sound/wav')
 
 	return fName
 
 def getSpeechTranscript(uri):
-	audio = speech.types.RecognitionAudio(uri=uri)
+    audio = speech.types.RecognitionAudio(uri=uri)
+    stt_config = speech.types.RecognitionConfig(
+        encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=8000,
+        language_code='en-US')
 
-
-	config = speech.types.RecognitionConfig(
-	    encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
-	    sample_rate_hertz=8000,
-	    language_code='en-US')
-
-	# Detects speech in the audio file
-	response = stt_client.recognize(config, audio)
-
-	print(response.results)
-	return response.results[0].alternatives[0].transcript
+    # Detects speech in the audio file
+    response = stt_client.recognize(stt_config, audio)
+    if len(response.results) == 0:
+        return 0
+    print(response.results)
+    return response.results[0].alternatives[0].transcript
 
 def gapiAnalysisText(text):
 	document = language.types.Document(
@@ -146,7 +148,7 @@ def gapiAnalysisText(text):
 
 	encoding_type = language.enums.EncodingType.UTF8
 
-	response = client.analyze_entities(document, encoding_type=encoding_type)
+	response = nlp_client.analyze_entities(document, encoding_type=encoding_type)
 	# Loop through entitites returned from the API
 
 
@@ -217,13 +219,19 @@ def listen_print_loop(responses):
 
 def create_new_profile(phoneId, url):
     
-    file_name = gapiUploadUsingURL(source_file_name, project_id, 
+    file_name = gapiUploadUsingURL(url, project_id, 
 								bucket_name, destination_folder_path)
 
     print("============= file collected")
-    speech_to_text = getSpeechTranscript(file_name)
+    url_full = "gs://bostonhack_elmingo/wav_intro/{}".format(file_name)
+    print("url: ", url_full)
+    speech_to_text = getSpeechTranscript(url_full)
+    if speech_to_text == 0:
+        user_characteristics = " "
+    else:
+        user_characteristics = gapiAnalysisText(speech_to_text)
+
     print("============= file collected2")
-    user_characteristics = gapiAnalysisText(speech_to_text)
     
     data = {
     u'status': u'waiting',
@@ -248,9 +256,9 @@ def check_available(phoneId):
             if phoneId == user["number"]:
                 continue
             try:
-                if user["status"] == 'waiting':
-                    user_chars = user.get('characterstics')
-                    similarity_dict[compute_similarity(caller_chars, user_chars)] = user["number"]
+                # if user["status"] == "waiting":
+                user_chars = user.get('characterstics')
+                similarity_dict[compute_similarity(caller_chars, user_chars)] = user["number"]
             except:
                 print("none")
         except:
@@ -259,6 +267,7 @@ def check_available(phoneId):
     if len(similarity_dict) == 0:
         return -1
 
+    print("sim dict: ", similarity_dict)
     best_similarity_score = max(similarity_dict.keys())
 
     match_number = similarity_dict[best_similarity_score]
@@ -278,13 +287,13 @@ if __name__ == "__main__":
     # for a list of supported languages.
     language_code = 'zh-TW'  # a BCP-47 language tag
     client = speech.SpeechClient()
-    config = speech.types.RecognitionConfig(
+    lang_config = speech.types.RecognitionConfig(
         encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
         sample_rate_hertz=RATE,
         language_code=language_code)
 
     streaming_config = speech.types.StreamingRecognitionConfig(
-        config=config,
+        config=lang_config,
         interim_results=True)
     
     app.run(debug=True)
