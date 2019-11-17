@@ -1,3 +1,4 @@
+from __future__ import division
 from flask import Flask, request
 from twilio.twiml.voice_response import VoiceResponse, Record, Dial
 import firebase_admin
@@ -7,7 +8,32 @@ import datetime
 from google.cloud import speech
 from google.cloud.speech import enums
 from google.cloud.speech import types
+from google.cloud import storage
+import urllib.request
 
+import re
+import sys
+import pyaudio
+from six.moves import queue
+
+# Audio recording parameters
+RATE = 16000
+CHUNK = int(RATE / 10)  # 100ms
+
+# Imports the Google Cloud client library
+from google.cloud import language
+from google.cloud.language import enums
+from google.cloud.language import types
+
+# Instantiates a client
+nlp_client = language.LanguageServiceClient()
+ENTITY_TYPE_TO_IGNORE = [8, 9, 10, 11, 12]
+
+# storage creditials
+source_file_name="https://api.twilio.com/2010-04-01/Accounts/ACea8ab3fe5e5886713b6248a77d2e6044/Recordings/REc608fdadf93db987c00d6e5b984f9596"
+project_id = 'ElMingo'
+bucket_name = 'bostonhack_elmingo'
+destination_folder_path="wav_intro"
 
 app = Flask(__name__)
 
@@ -19,7 +45,8 @@ cred = credentials.Certificate('/home/natasha/athena/Desktop/ElMingle/ElMingleCr
 firebase_admin.initialize_app(cred)
 
 db = firestore.client()
-client = speech.SpeechClient()
+stt_client = speech.SpeechClient()
+storage_client = storage.Client()
 
 @app.route("/answer", methods=['GET', 'POST'])
 def answer_call():
@@ -48,7 +75,7 @@ def recording_received():
     recordingURL = request.form["RecordingUrl"]
     userNumber = request.values.get('From')
 
-    # resp = VoiceResponse()
+    resp = VoiceResponse()
     # resp.say("Nice to meet you. In just a few moments you'll be speaking to the grandpapi or grandmommy of your dreams! Sit tight while we find you a match that will warm your heart!", voice='Polly.Emma')
 
     create_new_profile(userNumber, recordingURL)
@@ -77,15 +104,132 @@ def recording_received():
 
     return str(resp)
 
+def gapiUploadUsingURL(url, pid, bn, fp):
+	url_splitted = url.split("/")
+	if(url_splitted[0]=='https:'):
+		url_splitted[0]='http:'
+
+	url="/".join(map(str,url_splitted))
+	print("uploading file at: %s\n"%url)
+
+	fName = url_splitted[-1]
+	fName = "{}.wav".format(fName)
+	print("Save as file: %s\n"%fName)
+
+	file = urllib.request.urlopen(url)
+
+	bucket = storage_client.get_bucket(bn)
+	blob = bucket.blob("{}/{}".format(fp, fName))
+
+	blob.upload_from_string(file.read(), content_type='sound/wav')
+
+	return fName
+
+def getSpeechTranscript(uri):
+	audio = types.RecognitionAudio(uri=uri)
+
+
+	config = types.RecognitionConfig(
+	    encoding=enums.RecognitionConfig.AudioEncoding.LINEAR16,
+	    sample_rate_hertz=8000,
+	    language_code='en-US')
+
+	# Detects speech in the audio file
+	response = client.recognize(config, audio)
+
+	print(response.results)
+	return response.results[0].alternatives[0].transcript
+
+def gapiAnalysisText(text):
+	document = types.Document(
+	    content=text,
+	    type=enums.Document.Type.PLAIN_TEXT)
+
+	encoding_type = enums.EncodingType.UTF8
+
+	response = client.analyze_entities(document, encoding_type=encoding_type)
+	# Loop through entitites returned from the API
+
+
+	key_words=list()
+
+	for entity in response.entities:
+		if (entity.type not in ENTITY_TYPE_TO_IGNORE):
+			key_words.append(entity.name)
+
+	key_words=list(dict.fromkeys(key_words))
+	key_words.sort()
+	return ",".join(map(str,key_words))
+
+def listen_print_loop(responses):
+    """Iterates through server responses and prints them.
+
+    The responses passed is a generator that will block until a response
+    is provided by the server.
+
+    Each response may contain multiple results, and each result may contain
+    multiple alternatives; for details, see https://goo.gl/tjCPAU.  Here we
+    print only the transcription for the top alternative of the top result.
+
+    In this case, responses are provided for interim results as well. If the
+    response is an interim one, print a line feed at the end of it, to allow
+    the next result to overwrite it, until the response is a final one. For the
+    final one, print a newline to preserve the finalized transcription.
+    """
+    num_chars_printed = 0
+    for response in responses:
+        if not response.results:
+            continue
+
+        # The `results` list is consecutive. For streaming, we only care about
+        # the first result being considered, since once it's `is_final`, it
+        # moves on to considering the next utterance.
+        result = response.results[0]
+        if not result.alternatives:
+            continue
+
+        # Display the transcription of the top alternative.
+        transcript = result.alternatives[0].transcript
+
+        # Display interim results, but with a carriage return at the end of the
+        # line, so subsequent lines will overwrite them.
+        #
+        # If the previous result was longer than this one, we need to print
+        # some extra spaces to overwrite the previous result
+        overwrite_chars = ' ' * (num_chars_printed - len(transcript))
+
+        if not result.is_final:
+            sys.stdout.write(transcript + overwrite_chars + '\r')
+            sys.stdout.flush()
+
+            num_chars_printed = len(transcript)
+
+        else:
+            print(transcript + overwrite_chars)
+
+            # Exit recognition if any of the transcribed phrases could be
+            # one of our keywords.
+            if re.search(r'\b(exit|quit)\b', transcript, re.I):
+                print('Exiting..')
+                break
+
+            num_chars_printed = 0
+
+
 def create_new_profile(phoneId, url):
     
-    text = 'example chars'
+    file_name = gapiUploadUsingURL(source_file_name, project_id, 
+								bucket_name, destination_folder_path)
+
+    speech_to_text = getSpeechTranscript(file_name)
+
+    user_characteristics = gapiAnalysisText(speech_to_text)
     
     data = {
     u'status': u'waiting',
     u'intro_url': url,
     u'number':phoneId,
-    u'characteristics':text, 
+    u'characteristics':user_characteristics, 
     }
 
     db.collection(u'user_profiles').document(phoneId).set(data)
@@ -127,6 +271,7 @@ def compute_similarity(caller_chars, user_chars):
     charList=user_chars.split(",")
     res = len(set(caller_char_list) & set(charList)) / float(len(set(caller_char_list) | set(charList))) * 100
     return res
+
 
 if __name__ == "__main__":
     app.run(debug=True)
